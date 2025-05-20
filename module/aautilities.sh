@@ -1,68 +1,229 @@
 #!/system/bin/sh
+MODDIR=${0%/*}
 
-enforce_install_from_magisk_app(){
-  if [ "$BOOTMODE" ] && [ "$KSU" ]; then
-  ui_print "- Install from KernelSU APP"
-  ui_print "- KernelSU version: $KSU_KERNEL_VER_CODE (kernel) + $KSU_VER_CODE (ksud)"
-  if [ "$(which magisk)" ]; then
-    ui_print "! Detect multiple Root implements!"
-  fi
-  elif [ "$BOOTMODE" ] && [ "$APATCH" ]; then
-  ui_print "- Install from APatch APP"
-  ui_print "- APatch version: $APATCH_VER_CODE"
-  elif [ "$BOOTMODE" ] && [ "$MAGISK_VER_CODE" ]; then
-    if [[ "$MAGISK_VER" == *"-alpha" ]]; then
-    ui_print "- Install from Magisk Alpha APP"
-    elif [[ "$MAGISK_VER" == *"-lite" ]]; then
-    ui_print "- Install from Magisk Lite APP"
-    elif [[ "$MAGISK_VER" == *"-kitsune" ]]; then
-    ui_print "- Install from Kitsune Mask APP"
-    elif [[ "$MAGISK_VER" == *"-delta" ]]; then
-    ui_print "- Install from Magisk Delta APP"
-    else
-    ui_print "- Install from Magisk APP"
+is_magisk() {
+
+    if ! command -v magisk >/dev/null 2>&1; then
+        return 1
     fi
-  ui_print "- Magisk version name: $MAGISK_VER"
-  ui_print "- Magisk version code: $MAGISK_VER_CODE"
-  else
-  ui_print "! Install modules in Recovery mode is not support!"
-  about "! Please install this module in Magisk/KernelSU/APatch APP!"
-  fi
+
+    MAGISK_V_VER_NAME="$(magisk -v)"
+    MAGISK_V_VER_CODE="$(magisk -V)"
+    case "$MAGISK_V_VER_NAME" in
+        *"-alpha"*) MAGISK_BRANCH_NAME="Magisk Alpha" ;;
+        *"-lite"*)  MAGISK_BRANCH_NAME="Magisk Lite" ;;
+        *"-kitsune"*) MAGISK_BRANCH_NAME="Kitsune Mask" ;;
+        *"-delta"*) MAGISK_BRANCH_NAME="Magisk Delta" ;;
+        *) MAGISK_BRANCH_NAME="Magisk" ;;
+    esac
+    DETECT_MAGISK="true"
+    DETECT_MAGISK_DETAIL="$MAGISK_BRANCH_NAME (${MAGISK_VER_CODE:-$MAGISK_V_VER_CODE})"
+    return 0
+
 }
 
-show_system_info(){
-  ui_print "- Device brand: `getprop ro.product.brand`"
-  ui_print "- Device model: `getprop ro.product.model`"
-  ui_print "- Device codeName: `getprop ro.product.device`"
-  ui_print "- Device Architecture: $ARCH"
-  ui_print "- Android version: `getprop ro.build.version.release` API $API"
-  ui_print "- RAM space: `free -m|grep "Mem"|awk '{print $2}'`MB  used:`free -m|grep "Mem"|awk '{print $3}'`MB  free:$((`free -m|grep "Mem"|awk '{print $2}'`-`free -m|grep "Mem"|awk '{print $3}'`))MB"
-  ui_print "- SWAP space: `free -m|grep "Swap"|awk '{print $2}'`MB  used:`free -m|grep "Swap"|awk '{print $3}'`MB  free:`free -m|grep "Swap"|awk '{print $4}'`MB"
+is_kernelsu() {
+    if [ -n "$KSU" ]; then
+        DETECT_KSU="true"
+        DETECT_KSU_DETAIL="KernelSU (kernel:$KSU_KERNEL_VER_CODE, ksud:$KSU_VER_CODE)"
+        ROOT_SOL="KernelSU"
+        return 0
+    fi
+    return 1
+}
+
+is_apatch() {
+    if [ -n "$APATCH" ]; then
+        DETECT_APATCH="true"
+        DETECT_APATCH_DETAIL="APatch ($APATCH_VER_CODE)"
+        ROOT_SOL="APatch"
+        return 0
+    fi
+    return 1
+}
+
+install_env_check() {
+
+    MAGISK_BRANCH_NAME="Official"
+    ROOT_SOL="Magisk"
+    ROOT_SOL_COUNT=0
+
+    is_kernelsu && ROOT_SOL_COUNT=$((ROOT_SOL_COUNT + 1))
+    is_apatch && ROOT_SOL_COUNT=$((ROOT_SOL_COUNT + 1))
+    is_magisk && ROOT_SOL_COUNT=$((ROOT_SOL_COUNT + 1))
+
+    if [ "$DETECT_KSU" = "true" ]; then
+        ROOT_SOL_DETAIL="KernelSU (kernel:$KSU_KERNEL_VER_CODE, ksud:$KSU_VER_CODE)"
+        if [ "$ROOT_SOL_COUNT" -gt 1 ]; then
+            ROOT_SOL="Multiple"
+            if [ "$DETECT_APATCH" = "true" ] && [ "$DETECT_MAGISK" = "true" ]; then
+                ROOT_SOL_DETAIL="Multiple (${DETECT_MAGISK_DETAIL};${DETECT_KSU_DETAIL};${DETECT_APATCH_DETAIL})"
+            elif [ "$DETECT_APATCH" = "true" ]; then
+                ROOT_SOL_DETAIL="Multiple (${DETECT_KSU_DETAIL};${DETECT_APATCH_DETAIL})"
+            elif [ "$DETECT_MAGISK" = "true" ]; then
+                ROOT_SOL_DETAIL="Multiple (${DETECT_MAGISK_DETAIL};${DETECT_KSU_DETAIL})"
+            fi
+        elif [ "$ROOT_SOL_COUNT" -eq 1 ]; then
+            ROOT_SOL="KernelSU"
+        fi
+    elif [ "$DETECT_APATCH" = "true" ]; then
+        ROOT_SOL_DETAIL="APatch ($APATCH_VER_CODE)"
+        if [ "$ROOT_SOL_COUNT" -gt 1 ] && [ "$DETECT_MAGISK" = "true" ]; then
+            ROOT_SOL="Multiple"
+            ROOT_SOL_DETAIL="Multiple (${DETECT_MAGISK_DETAIL};${DETECT_APATCH_DETAIL})"
+        elif [ "$ROOT_SOL_COUNT" -eq 1 ]; then
+            ROOT_SOL="APatch"
+        fi
+    elif [ "$DETECT_MAGISK" = "true" ]; then
+        ROOT_SOL="Magisk"
+        ROOT_SOL_DETAIL="$MAGISK_BRANCH_NAME (${MAGISK_VER_CODE:-$MAGISK_V_VER_CODE})"
+    fi
+
+    if [ "$ROOT_SOL_COUNT" -lt 1 ]; then
+        ROOT_SOL="Unknown"
+        ROOT_SOL_DETAIL="Unknown"
+    fi
+
+}
+
+logowl() {
+    LOG_MSG="$1"
+    LOG_MSG_LEVEL="$2"
+    LOG_MSG_PREFIX=""
+
+    [ -z "$LOG_MSG" ] && return 1
+
+    case "$LOG_MSG_LEVEL" in
+        "TIPS") LOG_MSG_PREFIX="> " ;;
+        "WARN") LOG_MSG_PREFIX="- warn: " ;;
+        "ERROR") LOG_MSG_PREFIX="! ERROR: " ;;
+        "FATAL") LOG_MSG_PREFIX="× FATAL: " ;;
+        "SPACE") LOG_MSG_PREFIX="  " ;;
+        "NONE") LOG_MSG_PREFIX="" ;;
+        *) LOG_MSG_PREFIX="- " ;;
+    esac
+
+    if [ -n "$LOG_FILE" ]; then
+        if [ "$LOG_MSG_LEVEL" = "ERROR" ] || [ "$LOG_MSG_LEVEL" = "FATAL" ]; then
+            echo "----------------------------------------------------------------------" >> "$LOG_FILE"
+            echo "${LOG_MSG_PREFIX}${LOG_MSG}" >> "$LOG_FILE"
+            echo "----------------------------------------------------------------------" >> "$LOG_FILE"
+        elif [ "$LOG_MSG_LEVEL" = "NONE" ]; then
+            echo "$LOG_MSG" >> "$LOG_FILE"
+        else
+            echo "${LOG_MSG_PREFIX}${LOG_MSG}" >> "$LOG_FILE"
+        fi
+    else
+        if command -v ui_print >/dev/null 2>&1; then
+            if [ "$LOG_MSG_LEVEL" = "ERROR" ] || [ "$LOG_MSG_LEVEL" = "FATAL" ]; then
+                ui_print "----------------------------------------------------------------------"
+                ui_print "${LOG_MSG_PREFIX}${LOG_MSG}"
+                ui_print "----------------------------------------------------------------------"
+            elif [ "$LOG_MSG_LEVEL" = "NONE" ]; then
+                ui_print "$LOG_MSG"
+            else
+                ui_print "${LOG_MSG_PREFIX}${LOG_MSG}"
+            fi
+        else
+            echo "${LOG_MSG_PREFIX}${LOG_MSG}"
+        fi
+    fi
+}
+
+print_line() {
+
+    length=${1:-70}
+
+    line=$(printf "%-${length}s" | tr ' ' '-')
+    logowl "$line" "NONE"
+}
+
+update_config_value() {
+    key_name="$1"
+    key_value="$2"
+    file_path="$3"
+
+    [ -z "$key_name" ] || [ -z "$key_value" ] || [ -z "$file_path" ] && return 1
+    [ ! -f "$file_path" ] && return 2
+
+    sed -i "/^${key_name}=/c\\${key_name}=${key_value}" "$file_path"
+
+    result_update_value=$?
+    return "$result_update_value"
+
+}
+
+show_system_info() {
+
+    logowl "Device: $(getprop ro.product.brand) $(getprop ro.product.model) ($(getprop ro.product.device))"
+    logowl "OS: Android $(getprop ro.build.version.release) (API $(getprop ro.build.version.sdk)), $(getprop ro.product.cpu.abi | cut -d '-' -f1)"
+
+}
+
+abort_verify() {
+
+    [ -n "$VERIFY_DIR" ] && [ -d "$VERIFY_DIR" ] && [ "$VERIFY_DIR" != "/" ] && rm -rf "$VERIFY_DIR"
+    print_line
+    logowl "$1" "WARN"
+    abort "This zip may be corrupted or have been maliciously modified!"
+
 }
 
 extract() {
-  zip=$1
-  file=$2
-  dir=$3
-  junk_paths=$4
-  [ -z "$junk_paths" ] && junk_paths=false
-  opts="-o"
-  [ $junk_paths = true ] && opts="-oj"
 
-  file_path=""
-  if [ $junk_paths = true ]; then
-    file_path="$dir/$(basename "$file")"
-  else
-    file_path="$dir/$file"
-  fi
+    zip=$1
+    file=$2
+    dir=$3
+    junk_paths=${4:-false}
+    opts="-o"
+    [ $junk_paths = true ] && opts="-oj"
 
-  unzip $opts "$zip" "$file" -d "$dir" >&2
-  [ -f "$file_path" ] || abort "$file not exists"
-  ui_print "- Extract $file -> $file_path" >&1
-  
+    file_path=""
+    hash_path=""
+    if [ $junk_paths = true ]; then
+        file_path="$dir/$(basename "$file")"
+        hash_path="$VERIFY_DIR/$(basename "$file").sha256"
+    else
+        file_path="$dir/$file"
+        hash_path="$VERIFY_DIR/$file.sha256"
+    fi
+
+    unzip $opts "$zip" "$file" -d "$dir" >&2
+    [ -f "$file_path" ] || abort_verify "$file does NOT exist!"
+    logowl "Extract $file → $file_path" >&1
+
+    unzip $opts "$zip" "$file.sha256" -d "$VERIFY_DIR" >&2
+    [ -f "$hash_path" ] || abort_verify "$file.sha256 does NOT exist!"
+
+    expected_hash="$(cat "$hash_path")"
+    calculated_hash="$(sha256sum "$file_path" | cut -d ' ' -f1)"
+
+    if [ "$expected_hash" == "$calculated_hash" ]; then
+        logowl "Verified $file" >&1
+    else
+        abort_verify "Failed to verify $file"
+    fi
 }
 
-set_module_files_perm(){
-  ui_print "- Setting permissions"
-  set_perm_recursive "$MODPATH" 0 0 0755 0644
+set_permission() {
+
+    chown $2:$3 $1 || return 1    
+    chmod $4 $1 || return 1
+    
+    selinux_content=$5
+    [ -z "$selinux_content" ] && selinux_content=u:object_r:system_file:s0
+    chcon $selinux_content $1 || return 1
+
+}
+
+set_permission_recursive() {
+
+    find $1 -type d 2>/dev/null | while read dir; do
+        set_permission $dir $2 $3 $4 $6
+    done
+
+    find $1 -type f -o -type l 2>/dev/null | while read file; do
+        set_permission $file $2 $3 $5 $6
+    done
+
 }
