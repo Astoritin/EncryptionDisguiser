@@ -1,7 +1,7 @@
 id=encryptiondisguiser
 name=Encryption Disguiser
-version=v1.0.1
-versionCode=80
+version=v1.0.3
+versionCode=131
 author=Astoritin Ambrosius
 updateJson=https://raw.githubusercontent.com/Astoritin/Encryption_Disguiser/main/webpage/update.json
-description=A module to disguise the status of encryption as encrypted✨
+description=A Magisk module to disguise the status of encryption as encrypted.
