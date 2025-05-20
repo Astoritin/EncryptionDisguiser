@@ -30,7 +30,6 @@ logowl "Extract module files"
 extract "$ZIPFILE" 'aautilities.sh' "$MODPATH"
 extract "$ZIPFILE" 'module.prop' "$MODPATH"
 extract "$ZIPFILE" 'service.sh' "$MODPATH"
-extract "$ZIPFILE" 'uninstall.sh' "$MODPATH"
 logowl "Set permission"
 set_permission_recursive "$MODPATH" 0 0 0755 0644
 logowl "Welcome to use ${MOD_NAME}!"
