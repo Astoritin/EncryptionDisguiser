@@ -86,6 +86,20 @@ install_env_check() {
 
 }
 
+module_intro() {
+
+    install_env_check
+    print_line
+    logowl "$MOD_NAME"
+    logowl "By $MOD_AUTHOR"
+    logowl "Version: $MOD_VER"
+    logowl "Root: $ROOT_SOL_DETAIL"
+    logowl "Timestamp: $(date +"%Y-%m-%d %H:%M:%S")"
+    logowl "Module dir: $MODDIR"
+    print_line
+
+}
+
 logowl() {
     LOG_MSG="$1"
     LOG_MSG_LEVEL="$2"
@@ -95,20 +109,20 @@ logowl() {
 
     case "$LOG_MSG_LEVEL" in
         "TIPS") LOG_MSG_PREFIX="> " ;;
-        "WARN") LOG_MSG_PREFIX="- warn: " ;;
+        "WARN") LOG_MSG_PREFIX="- Warn: " ;;
         "ERROR") LOG_MSG_PREFIX="! ERROR: " ;;
         "FATAL") LOG_MSG_PREFIX="× FATAL: " ;;
-        "SPACE") LOG_MSG_PREFIX="  " ;;
-        "NONE") LOG_MSG_PREFIX="" ;;
+        " ") LOG_MSG_PREFIX="  " ;;
+        "-") LOG_MSG_PREFIX="" ;;
         *) LOG_MSG_PREFIX="- " ;;
     esac
 
     if [ -n "$LOG_FILE" ]; then
         if [ "$LOG_MSG_LEVEL" = "ERROR" ] || [ "$LOG_MSG_LEVEL" = "FATAL" ]; then
-            echo "----------------------------------------------------------------------" >> "$LOG_FILE"
+            echo "----------------------------------------" >> "$LOG_FILE"
             echo "${LOG_MSG_PREFIX}${LOG_MSG}" >> "$LOG_FILE"
-            echo "----------------------------------------------------------------------" >> "$LOG_FILE"
-        elif [ "$LOG_MSG_LEVEL" = "NONE" ]; then
+            echo "----------------------------------------" >> "$LOG_FILE"
+        elif [ "$LOG_MSG_LEVEL" = "-" ]; then
             echo "$LOG_MSG" >> "$LOG_FILE"
         else
             echo "${LOG_MSG_PREFIX}${LOG_MSG}" >> "$LOG_FILE"
@@ -116,10 +130,10 @@ logowl() {
     else
         if command -v ui_print >/dev/null 2>&1; then
             if [ "$LOG_MSG_LEVEL" = "ERROR" ] || [ "$LOG_MSG_LEVEL" = "FATAL" ]; then
-                ui_print "----------------------------------------------------------------------"
+                ui_print "----------------------------------------"
                 ui_print "${LOG_MSG_PREFIX}${LOG_MSG}"
-                ui_print "----------------------------------------------------------------------"
-            elif [ "$LOG_MSG_LEVEL" = "NONE" ]; then
+                ui_print "----------------------------------------"
+            elif [ "$LOG_MSG_LEVEL" = "-" ]; then
                 ui_print "$LOG_MSG"
             else
                 ui_print "${LOG_MSG_PREFIX}${LOG_MSG}"
@@ -132,13 +146,13 @@ logowl() {
 
 print_line() {
 
-    length=${1:-70}
+    length=${1:-40}
 
     line=$(printf "%-${length}s" | tr ' ' '-')
-    logowl "$line" "NONE"
+    logowl "$line" "-"
 }
 
-update_config_value() {
+update_config_var() {
     key_name="$1"
     key_value="$2"
     file_path="$3"
@@ -163,9 +177,8 @@ show_system_info() {
 abort_verify() {
 
     [ -n "$VERIFY_DIR" ] && [ -d "$VERIFY_DIR" ] && [ "$VERIFY_DIR" != "/" ] && rm -rf "$VERIFY_DIR"
-    print_line
-    logowl "$1" "WARN"
-    abort "This zip may be corrupted or have been maliciously modified!"
+    logowl "$1" "ERROR"
+    abort "This zip may be corrupted or has been maliciously modified!"
 
 }
 
@@ -201,7 +214,7 @@ extract() {
     if [ "$expected_hash" == "$calculated_hash" ]; then
         logowl "Verified $file" >&1
     else
-        abort_verify "Failed to verify $file"
+        abort_verify "Failed to verify file $file"
     fi
 }
 
@@ -225,5 +238,15 @@ set_permission_recursive() {
     find $1 -type f -o -type l 2>/dev/null | while read file; do
         set_permission $file $2 $3 $5 $6
     done
+
+}
+
+check_before_resetprop() {
+
+    prop_name=$1
+    prop_expect_value=$2
+    prop_current_value=$(resetprop "$prop_name")
+
+    [ -z "$prop_current_value" ] || [ "$prop_current_value" = "$prop_expect_value" ] || resetprop "$prop_name" "$prop_expect_value"
 
 }
